@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Serveur de LLM sur GPU NVIDIA : vLLM.
+# Le modèle se change dans le ConfigMap llm-model (ou via un composant model-*),
+# jamais dans les arguments du conteneur.
+resources:
+  - vllm.yaml

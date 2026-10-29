@@ -1,0 +1,23 @@
+[project]
+name = "rag-app"
+version = "0.2.0"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["B008"] # FastAPI Depends() dans les valeurs par défaut
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+  "ignore:Payload indexes have no effect in the local Qdrant",
+  "ignore::DeprecationWarning:starlette",
+]

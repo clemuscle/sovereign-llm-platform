@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Tests de bout en bout en CI (cluster kind, sans GPU ni Ingress, petit modèle).
+# Les secrets sont créés par tests/e2e/create-secrets.sh, les images construites et chargées
+# dans kind par la CI (voir .github/workflows/ci.yaml).
+resources:
+  - ../../base
+
+components:
+  - ../../components/serving-cpu
+  - ../../components/model-source-hf
+  - ../../components/model-tiny-ci
+  - ../../components/image-pins
+
+patches:
+  # Runner CI : 4 vCPU, on réduit à un réplica.
+  - target: { kind: Deployment, name: litellm }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target: { kind: Deployment, name: rag-app }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1

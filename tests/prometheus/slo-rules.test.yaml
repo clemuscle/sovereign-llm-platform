@@ -1,0 +1,86 @@
+# Tests unitaires des règles d'alerte (promtool test rules), lancés en CI.
+# On rejoue des séries synthétiques et on vérifie quelles alertes se déclenchent, et quand.
+rule_files:
+  - rules.yaml # extrait de deploy/base/observability/slo-rules.yaml par la CI (make test-alerts)
+
+evaluation_interval: 1m
+
+tests:
+  # 1) Incident franc : 20 % d'erreurs sur /ask. Budget de 1 % brûlé 20 fois trop vite
+  #    (> 14,4) sur 1 h et sur 5 min : alerte critique.
+  - interval: 1m
+    input_series:
+      - series: 'traces_spanmetrics_calls_total{service="rag-app",span_kind="SPAN_KIND_SERVER",span_name="POST /ask",status_code="STATUS_CODE_UNSET"}'
+        values: "0+80x120"
+      - series: 'traces_spanmetrics_calls_total{service="rag-app",span_kind="SPAN_KIND_SERVER",span_name="POST /ask",status_code="STATUS_CODE_ERROR"}'
+        values: "0+20x120"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: RAGAvailabilityBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "SLO disponibilité RAG (99 %) : budget d'erreur consommé 14x trop vite"
+              description: "À ce rythme, 2 % du budget mensuel part en 1 h. Intervention immédiate."
+              runbook: docs/runbook.md#budget-derreur
+
+  # 2) Bruit de fond : 0,5 % d'erreurs, dans le budget (1 %). Aucune alerte.
+  - interval: 1m
+    input_series:
+      - series: 'traces_spanmetrics_calls_total{service="rag-app",span_kind="SPAN_KIND_SERVER",span_name="POST /ask",status_code="STATUS_CODE_UNSET"}'
+        values: "0+995x400"
+      - series: 'traces_spanmetrics_calls_total{service="rag-app",span_kind="SPAN_KIND_SERVER",span_name="POST /ask",status_code="STATUS_CODE_ERROR"}'
+        values: "0+5x400"
+    alert_rule_test:
+      - eval_time: 380m
+        alertname: RAGAvailabilityBudgetBurnFast
+        exp_alerts: []
+      - eval_time: 380m
+        alertname: RAGAvailabilityBudgetBurnSlow
+        exp_alerts: []
+
+  # 3) Pic bref déjà terminé : la fenêtre courte (5 min) éteint l'alerte même si la
+  #    fenêtre longue (1 h) reste élevée. C'est l'intérêt des deux fenêtres.
+  - interval: 1m
+    input_series:
+      - series: 'traces_spanmetrics_calls_total{service="rag-app",span_kind="SPAN_KIND_SERVER",span_name="POST /ask",status_code="STATUS_CODE_UNSET"}'
+        values: "0+80x30 2400+100x60"
+      - series: 'traces_spanmetrics_calls_total{service="rag-app",span_kind="SPAN_KIND_SERVER",span_name="POST /ask",status_code="STATUS_CODE_ERROR"}'
+        values: "0+20x30 600+0x60"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: RAGAvailabilityBudgetBurnFast
+        exp_alerts: []
+
+  # 4) Saturation mesurée sur llama.cpp : la règle unifiée llm:requests_waiting fonctionne
+  #    aussi sans vLLM (profil cpu).
+  - interval: 1m
+    input_series:
+      - series: 'llamacpp:requests_deferred{namespace="llm"}'
+        values: "8x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: LLMSaturated
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "File d'attente du moteur d'inférence"
+              description: "8 requêtes attendent un slot depuis 10 min : ajouter un réplica (KEDA) ou réduire le contexte."
+              runbook: docs/runbook.md#saturation
+
+  # 5) Moteur absent : alerte critique au bout de 5 minutes.
+  - interval: 1m
+    input_series:
+      - series: 'up{namespace="llm",service="llm",job="llm"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: LLMEngineDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Aucun serveur d'inférence ne répond"
+              runbook: docs/runbook.md#moteur-indisponible

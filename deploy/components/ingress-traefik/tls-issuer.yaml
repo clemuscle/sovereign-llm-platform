@@ -1,0 +1,37 @@
+# Autorité de certification locale, gérée par cert-manager :
+#   Issuer auto-signé -> certificat racine (CA) -> Issuer CA -> certificats des Ingress.
+# En production : remplacer l'Issuer CA par un ClusterIssuer ACME (Let's Encrypt) ou la PKI
+# interne de l'organisation. Récupérer la CA pour la faire confiance : `make trust-ca`.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned
+  namespace: llm
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: llm-platform-ca
+  namespace: llm
+spec:
+  isCA: true
+  commonName: sovereign-llm-platform-ca
+  secretName: llm-platform-ca
+  duration: 8760h # 1 an
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: llm-platform-ca
+  namespace: llm
+spec:
+  ca:
+    secretName: llm-platform-ca

@@ -1,0 +1,202 @@
+# Zero trust dans le namespace llm, en ENTRÉE et en SORTIE.
+# Tout est fermé par défaut ; chaque flux est ouvert explicitement pour un besoin réel.
+#
+#   [ingress controller] -> rag-app -> litellm -> llm (moteur d'inférence)
+#                              |          |-----> embeddings
+#                              |          |-----> litellm-db, litellm-redis
+#                              '-> qdrant
+#   kagent (ns kagent) -> litellm      litellm-keys-bootstrap -> litellm
+#   Prometheus (ns monitoring) -> /metrics     tous les pods -> OTel Collector (ns monitoring)
+#
+# Aucun pod n'a accès à Internet. Seule exception, ajoutée par le composant model-source-hf
+# (mode connecté) : les pods qui téléchargent des poids de modèle, en HTTPS uniquement.
+# En mode air-gapped (model-source-oci), ils n'atteignent que la registry interne.
+
+# --- Défauts -------------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-and-telemetry
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns # CoreDNS (k3s, kind, kubeadm, la plupart des clusters managés)
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - { port: 4317, protocol: TCP } # OTLP gRPC
+        - { port: 4318, protocol: TCP } # OTLP HTTP
+---
+# --- Application RAG ------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rag-app-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: rag-app
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: litellm
+      ports:
+        - port: 4000
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qdrant
+      ports:
+        - port: 6333
+        - port: 6334
+---
+# --- Gateway LiteLLM -----------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: litellm
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: litellm
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: rag-app
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: litellm-keys-bootstrap
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kagent
+      ports:
+        - port: 4000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: serving
+      ports:
+        - port: 8000
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: embeddings
+      ports:
+        - port: 80
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: litellm-db
+      ports:
+        - port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: litellm-redis
+      ports:
+        - port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: litellm-keys-bootstrap-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: litellm-keys-bootstrap
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: litellm
+      ports:
+        - port: 4000
+---
+# --- Données de la gateway : accessibles uniquement par LiteLLM ---------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: litellm-backends-ingress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: ["litellm-db", "litellm-redis"]
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: litellm
+      ports:
+        - port: 5432
+        - port: 6379
+---
+# --- Modèles : appelés par la gateway, scrapés par Prometheus ------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: model-servers-ingress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: ["serving", "embeddings"]
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: litellm
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8000
+        - port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qdrant-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: qdrant
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: rag-app
+      ports:
+        - port: 6333
+        - port: 6334

@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: model-source
+  namespace: llm
+data:
+  SOURCE: hf
+  HF_HUB_DISABLE_TELEMETRY: "1"
+---
+# Seule ouverture vers Internet de toute la plateforme : HTTPS, pour les pods qui téléchargent
+# des poids, hors adresses privées et métadonnées cloud.
+# Limite assumée : une NetworkPolicy standard filtre par IP, pas par nom de domaine. Restreindre
+# à huggingface.co exige une politique FQDN (Cilium) ou un proxy de sortie. Le mode air-gapped
+# (model-source-oci) supprime totalement cette ouverture.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: model-download-egress
+  namespace: llm
+spec:
+  podSelector:
+    matchLabels:
+      llm.platform/model-fetch: "true"
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16 # métadonnées des fournisseurs cloud
+      ports:
+        - { port: 443, protocol: TCP }

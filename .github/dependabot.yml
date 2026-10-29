@@ -1,0 +1,20 @@
+# Mises à jour proposées par pull request : rien ne change sans revue ni CI verte.
+version: 2
+updates:
+  - package-ecosystem: github-actions # actions figées par SHA : Dependabot met à jour le SHA et le commentaire
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }
+  - package-ecosystem: pip
+    directories: ["/apps/rag", "/apps/platform-tools"]
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directories: ["/apps/rag", "/apps/platform-tools"]
+    schedule: { interval: weekly }
+  - package-ecosystem: terraform
+    directory: /infra/terraform
+    schedule: { interval: monthly }
+# Hors périmètre de Dependabot : versions de charts Helm (variables.tf) et images de
+# deploy/components/image-pins. Renovate sait les gérer (gestionnaires helm-values,
+# kustomize et regex) ; à défaut, `pin.py images --update` en revue de code.

@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: model-source
+  namespace: llm
+data:
+  SOURCE: oci
+  OCI_REGISTRY: zot.model-store.svc.cluster.local:5000/models
+  # Trafic interne au cluster. Pour du TLS : certificat cert-manager sur Zot, puis "false".
+  OCI_PLAIN_HTTP: "true"
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: model-download-egress
+  namespace: llm
+spec:
+  podSelector:
+    matchLabels:
+      llm.platform/model-fetch: "true"
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: model-store
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: zot
+      ports:
+        - { port: 5000, protocol: TCP }

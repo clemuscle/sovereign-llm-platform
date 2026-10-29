@@ -1,0 +1,16 @@
+# Copie ce fichier en terraform.tfvars (ignoré par Git) et adapte-le.
+
+kubeconfig_path = "~/.kube/k3s.yaml"
+kube_context    = "default"
+
+# "gpu" si une carte NVIDIA est prête (docs/gpu-on-k3s.md), sinon "cpu".
+profile = "gpu"
+
+# true : registry interne Zot, aucun accès Internet depuis les workloads (docs/airgap.md).
+airgap = false
+
+git_repo_url = "https://github.com/<ton-compte>/sovereign-llm-platform.git"
+git_revision = "main"
+
+enable_kagent = true
+enable_keda   = false # true à partir de 2 GPU, avec le composant autoscaling-keda

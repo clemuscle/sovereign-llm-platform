@@ -1,0 +1,6 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Mode connecté : les poids sont téléchargés depuis Hugging Face, à une révision figée.
+resources:
+  - model-source.yaml

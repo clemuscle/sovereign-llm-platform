@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Serveur de LLM sans GPU : llama.cpp, même modèle en GGUF 4 bits.
+# Même Service "llm", même port, même nom de modèle servi : rien ne change pour les clients.
+resources:
+  - llamacpp.yaml

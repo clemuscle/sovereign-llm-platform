@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Profil cpu, mode connecté : llama.cpp (GGUF 4 bits), sans GPU.
+resources:
+  - ../../base
+  - ../../agents
+  - ../../secrets
+
+components:
+  - ../../components/serving-cpu
+  - ../../components/model-source-hf
+  - ../../components/ingress-traefik
+  # - ../../components/autoscaling-keda     # à partir de 2 GPU (enable_keda = true)
+  - ../../components/image-pins # toujours en dernier : fixe les versions de toutes les images

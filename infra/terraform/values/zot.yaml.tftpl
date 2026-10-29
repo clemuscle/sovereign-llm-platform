@@ -1,0 +1,11 @@
+# Registry OCI interne (Zot, CNCF Sandbox) : miroir des images ET stockage des poids de
+# modèles (artefacts OCI poussés par `make stage-model`).
+service:
+  type: NodePort
+  port: 5000
+  nodePort: ${node_port} # point d'entrée de containerd (voir infra/k3s/registries.yaml.example)
+
+persistence: true
+pvc:
+  create: true
+  storage: 150Gi # images de la plateforme + poids des modèles

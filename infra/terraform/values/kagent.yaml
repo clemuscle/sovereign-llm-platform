@@ -1,0 +1,43 @@
+# kagent est installé sans ses agents d'exemple : notre agent et sa configuration de modèle
+# (LLM auto-hébergé) sont livrés par GitOps dans deploy/agents.
+
+providers:
+  default: openAI
+  openAI:
+    # ModelConfig par défaut du chart, utilisé par aucun de nos agents. Il référence un
+    # secret absent : aucune clé n'est créée, aucune requête ne part vers OpenAI.
+    provider: OpenAI
+    model: "unused"
+    apiKeySecretRef: kagent-openai
+    apiKeySecretKey: OPENAI_API_KEY
+
+# Agents d'exemple du chart : désactivés.
+k8s-agent:
+  enabled: false
+kgateway-agent:
+  enabled: false
+istio-agent:
+  enabled: false
+promql-agent:
+  enabled: false
+observability-agent:
+  enabled: false
+argo-rollouts-agent:
+  enabled: false
+helm-agent:
+  enabled: false
+cilium-policy-agent:
+  enabled: false
+cilium-manager-agent:
+  enabled: false
+cilium-debug-agent:
+  enabled: false
+
+otel:
+  tracing:
+    enabled: true
+    exporter:
+      otlp:
+        endpoint: otel-collector.monitoring:4317
+        protocol: grpc
+        insecure: true

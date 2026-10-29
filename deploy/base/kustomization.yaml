@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Socle commun à tous les profils. Le serveur de modèle, la source des poids, l'exposition
+# et les versions d'images sont ajoutés par des composants (deploy/components) dans les overlays.
+namespace: llm
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: sovereign-llm-platform
+    includeSelectors: false
+
+resources:
+  - gateway/litellm.yaml
+  - gateway/litellm-db.yaml
+  - gateway/litellm-redis.yaml
+  - gateway/litellm-keys.yaml
+  - embeddings/tei.yaml
+  - vectordb/qdrant.yaml
+  - rag/rag-app.yaml
+  - security/network-policies.yaml
+  - observability/slo-rules.yaml
+
+configMapGenerator:
+  - name: litellm-config
+    files:
+      - config.yaml=gateway/litellm-config.yaml
+  - name: litellm-clients
+    files:
+      - clients.json=gateway/clients.json
+  - name: grafana-dashboard-llm
+    files:
+      - llm-platform.json=observability/dashboard-llm.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"

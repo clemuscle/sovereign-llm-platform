@@ -1,0 +1,60 @@
+# OpenTelemetry Collector : point d'entrée unique de la télémétrie.
+# Les applications n'envoient qu'en OTLP vers otel-collector.monitoring:4317/4318 ;
+# le choix des backends (Tempo, Loki, Prometheus) se fait ici, sans toucher au code.
+
+fullnameOverride: otel-collector
+mode: daemonset
+
+image:
+  repository: otel/opentelemetry-collector-k8s
+
+# Le Service d'un DaemonSet est en internalTrafficPolicy: Local (trafic vers le collecteur du
+# même nœud). Il doit donc tourner sur TOUS les nœuds, y compris les nœuds GPU "taintés" :
+# sinon la télémétrie des pods GPU serait perdue sans erreur visible.
+tolerations:
+  - operator: Exists
+
+service:
+  enabled: true
+
+presets:
+  kubernetesAttributes:
+    enabled: true # ajoute k8s.pod.name, k8s.namespace.name... à chaque signal
+  logsCollection:
+    enabled: true # lit les logs de tous les conteneurs du nœud (receiver filelog)
+    includeCollectorLogs: false
+
+config:
+  processors:
+    memory_limiter:
+      check_interval: 5s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+    batch: {}
+
+  exporters:
+    otlp/tempo:
+      endpoint: tempo.monitoring:4317
+      tls:
+        insecure: true
+    otlphttp/loki:
+      endpoint: http://loki.monitoring:3100/otlp
+    prometheusremotewrite:
+      endpoint: http://kube-prometheus-stack-prometheus.monitoring:9090/api/v1/write
+      resource_to_telemetry_conversion:
+        enabled: true
+
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlp/tempo]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [prometheusremotewrite]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlphttp/loki]

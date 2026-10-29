@@ -1,0 +1,31 @@
+# Stratégie "driver et toolkit sur l'hôte" (la plus simple et la plus robuste sur k3s) :
+#  - le driver NVIDIA et nvidia-container-toolkit sont installés sur la machine,
+#  - k3s détecte le runtime nvidia au démarrage et crée la RuntimeClass "nvidia",
+#  - l'operator ne gère que le reste : device plugin, GPU Feature Discovery,
+#    DCGM exporter (métriques GPU) et le validator.
+# Détails et alternative "toolkit géré par l'operator" : docs/gpu-on-k3s.md
+
+driver:
+  enabled: false # driver installé sur l'hôte
+
+toolkit:
+  enabled: false # nvidia-container-toolkit installé sur l'hôte, détecté par k3s
+
+operator:
+  runtimeClass: nvidia # les composants de l'operator tournent avec la RuntimeClass k3s
+
+devicePlugin:
+  enabled: true # expose la ressource nvidia.com/gpu au scheduler
+
+dcgmExporter:
+  enabled: true
+  serviceMonitor:
+    enabled: true # Prometheus scrape les métriques GPU (DCGM_FI_DEV_*)
+
+gfd:
+  enabled: true # labels de nœud : modèle de GPU, mémoire, version CUDA
+
+nfd:
+  enabled: true
+
+# Partage d'un GPU entre plusieurs pods (time-slicing) : voir docs/gpu-on-k3s.md

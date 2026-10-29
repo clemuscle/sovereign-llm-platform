@@ -1,0 +1,133 @@
+# SLO de la plateforme et alertes associées.
+#
+# SLI mesurés au point de vue de l'utilisateur (spans serveur de l'API RAG, convertis en
+# métriques par Tempo), donc identiques quel que soit le moteur (vLLM ou llama.cpp) :
+#   - disponibilité : 99 % des requêtes /ask et /ingest sans erreur serveur (budget 1 %)
+#   - latence       : 95 % des /ask en moins de 8 s (budget 5 %) ; seuil = bucket 8.192 s de Tempo
+#
+# Alertes "multi-fenêtres, multi-taux de consommation" (Google SRE Workbook, chap. 5) :
+# on alerte sur la VITESSE à laquelle le budget d'erreur est consommé, pas sur un seuil brut.
+#   page   : taux x14,4 sur 1 h ET 5 min  -> 2 % du budget mensuel brûlé en 1 h
+#   ticket : taux x6    sur 6 h ET 30 min -> 5 % du budget mensuel brûlé en 6 h
+# La fenêtre courte évite d'alerter encore longtemps après la fin d'un incident.
+#
+# Les règles "llm-engine" unifient les métriques des deux moteurs : dashboard et autoscaling
+# fonctionnent à l'identique en profil gpu (vLLM) et cpu (llama.cpp).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: llm-platform-slo
+spec:
+  groups:
+  - name: llm-engine.recording
+    rules:
+    - record: llm:requests_running
+      expr: sum(vllm:num_requests_running) or sum(llamacpp:requests_processing)
+    - record: llm:requests_waiting
+      expr: sum(vllm:num_requests_waiting) or sum(llamacpp:requests_deferred)
+    - record: llm:generation_tokens:rate1m
+      expr: sum(rate(vllm:generation_tokens_total[1m])) or sum(rate(llamacpp:tokens_predicted_total[1m]))
+    - record: llm:prompt_tokens:rate1m
+      expr: sum(rate(vllm:prompt_tokens_total[1m])) or sum(rate(llamacpp:prompt_tokens_total[1m]))
+    - record: llm:kv_cache_usage:ratio
+      expr: max(vllm:kv_cache_usage_perc) or max(vllm:gpu_cache_usage_perc) or max(llamacpp:kv_cache_usage_ratio)
+    - record: llm:ttft_seconds:p95_5m
+      expr: histogram_quantile(0.95, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket[5m])))
+  - name: slo.recording
+    interval: 30s
+    rules:
+    - record: slo:rag_errors:ratio_rate5m
+      expr: sum(rate(traces_spanmetrics_calls_total{service="rag-app", span_kind="SPAN_KIND_SERVER", span_name=~"POST /(ask|ingest)", status_code="STATUS_CODE_ERROR"}[5m])) / sum(rate(traces_spanmetrics_calls_total{service="rag-app",
+        span_kind="SPAN_KIND_SERVER", span_name=~"POST /(ask|ingest)"}[5m]))
+    - record: slo:rag_ask_slow:ratio_rate5m
+      expr: 1 - (sum(rate(traces_spanmetrics_latency_bucket{service="rag-app", span_kind="SPAN_KIND_SERVER", span_name="POST /ask", le="8.192"}[5m])) / sum(rate(traces_spanmetrics_latency_count{service="rag-app",
+        span_kind="SPAN_KIND_SERVER", span_name="POST /ask"}[5m])))
+    - record: slo:rag_errors:ratio_rate30m
+      expr: sum(rate(traces_spanmetrics_calls_total{service="rag-app", span_kind="SPAN_KIND_SERVER", span_name=~"POST /(ask|ingest)", status_code="STATUS_CODE_ERROR"}[30m])) / sum(rate(traces_spanmetrics_calls_total{service="rag-app",
+        span_kind="SPAN_KIND_SERVER", span_name=~"POST /(ask|ingest)"}[30m]))
+    - record: slo:rag_ask_slow:ratio_rate30m
+      expr: 1 - (sum(rate(traces_spanmetrics_latency_bucket{service="rag-app", span_kind="SPAN_KIND_SERVER", span_name="POST /ask", le="8.192"}[30m])) / sum(rate(traces_spanmetrics_latency_count{service="rag-app",
+        span_kind="SPAN_KIND_SERVER", span_name="POST /ask"}[30m])))
+    - record: slo:rag_errors:ratio_rate1h
+      expr: sum(rate(traces_spanmetrics_calls_total{service="rag-app", span_kind="SPAN_KIND_SERVER", span_name=~"POST /(ask|ingest)", status_code="STATUS_CODE_ERROR"}[1h])) / sum(rate(traces_spanmetrics_calls_total{service="rag-app",
+        span_kind="SPAN_KIND_SERVER", span_name=~"POST /(ask|ingest)"}[1h]))
+    - record: slo:rag_ask_slow:ratio_rate1h
+      expr: 1 - (sum(rate(traces_spanmetrics_latency_bucket{service="rag-app", span_kind="SPAN_KIND_SERVER", span_name="POST /ask", le="8.192"}[1h])) / sum(rate(traces_spanmetrics_latency_count{service="rag-app",
+        span_kind="SPAN_KIND_SERVER", span_name="POST /ask"}[1h])))
+    - record: slo:rag_errors:ratio_rate6h
+      expr: sum(rate(traces_spanmetrics_calls_total{service="rag-app", span_kind="SPAN_KIND_SERVER", span_name=~"POST /(ask|ingest)", status_code="STATUS_CODE_ERROR"}[6h])) / sum(rate(traces_spanmetrics_calls_total{service="rag-app",
+        span_kind="SPAN_KIND_SERVER", span_name=~"POST /(ask|ingest)"}[6h]))
+    - record: slo:rag_ask_slow:ratio_rate6h
+      expr: 1 - (sum(rate(traces_spanmetrics_latency_bucket{service="rag-app", span_kind="SPAN_KIND_SERVER", span_name="POST /ask", le="8.192"}[6h])) / sum(rate(traces_spanmetrics_latency_count{service="rag-app",
+        span_kind="SPAN_KIND_SERVER", span_name="POST /ask"}[6h])))
+  - name: slo.alerts
+    rules:
+    - alert: RAGAvailabilityBudgetBurnFast
+      expr: slo:rag_errors:ratio_rate1h > (14.4 * 0.01) and slo:rag_errors:ratio_rate5m > (14.4 * 0.01)
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: 'SLO disponibilité RAG (99 %) : budget d''erreur consommé 14x trop vite'
+        description: À ce rythme, 2 % du budget mensuel part en 1 h. Intervention immédiate.
+        runbook: docs/runbook.md#budget-derreur
+    - alert: RAGAvailabilityBudgetBurnSlow
+      expr: slo:rag_errors:ratio_rate6h > (6 * 0.01) and slo:rag_errors:ratio_rate30m > (6 * 0.01)
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: 'SLO disponibilité RAG (99 %) : budget d''erreur consommé 6x trop vite'
+        description: À ce rythme, 5 % du budget mensuel part en 6 h. À traiter dans la journée.
+        runbook: docs/runbook.md#budget-derreur
+    - alert: RAGLatencyBudgetBurnFast
+      expr: slo:rag_ask_slow:ratio_rate1h > (14.4 * 0.05) and slo:rag_ask_slow:ratio_rate5m > (14.4 * 0.05)
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: 'SLO latence /ask (95 % < 8 s) : budget d''erreur consommé 14x trop vite'
+        description: À ce rythme, 2 % du budget mensuel part en 1 h. Intervention immédiate.
+        runbook: docs/runbook.md#budget-derreur
+    - alert: RAGLatencyBudgetBurnSlow
+      expr: slo:rag_ask_slow:ratio_rate6h > (6 * 0.05) and slo:rag_ask_slow:ratio_rate30m > (6 * 0.05)
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: 'SLO latence /ask (95 % < 8 s) : budget d''erreur consommé 6x trop vite'
+        description: À ce rythme, 5 % du budget mensuel part en 6 h. À traiter dans la journée.
+        runbook: docs/runbook.md#budget-derreur
+    - alert: LLMEngineDown
+      expr: sum(up{namespace="llm", service="llm"}) == 0 or absent(up{namespace="llm", service="llm"})
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: Aucun serveur d'inférence ne répond
+        runbook: docs/runbook.md#moteur-indisponible
+    - alert: LLMSaturated
+      expr: llm:requests_waiting > 5
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: File d'attente du moteur d'inférence
+        description: '{{ $value }} requêtes attendent un slot depuis 10 min : ajouter un réplica (KEDA) ou réduire le contexte.'
+        runbook: docs/runbook.md#saturation
+    - alert: GPUHardwareError
+      expr: max by (gpu, Hostname) (DCGM_FI_DEV_XID_ERRORS) > 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: Erreur matérielle GPU (XID {{ $value }})
+        runbook: docs/runbook.md#erreur-gpu
+    - alert: GPUOverheating
+      expr: max by (gpu, Hostname) (DCGM_FI_DEV_GPU_TEMP) > 85
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: GPU au-dessus de 85 °C depuis 10 min
+        runbook: docs/runbook.md#erreur-gpu

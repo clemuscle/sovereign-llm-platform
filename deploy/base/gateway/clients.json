@@ -1,0 +1,14 @@
+[
+  {
+    "alias": "rag-app",
+    "key_env": "RAG_KEY",
+    "models": ["chat", "embed"],
+    "rpm_limit": 120
+  },
+  {
+    "alias": "kagent",
+    "key_env": "KAGENT_KEY",
+    "models": ["chat"],
+    "rpm_limit": 30
+  }
+]

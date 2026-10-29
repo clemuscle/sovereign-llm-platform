@@ -1,0 +1,16 @@
+configs:
+  params:
+    # Pas exposé à l'extérieur : accès admin par `make argocd` (port-forward).
+    server.insecure: true
+
+server:
+  ingress:
+    enabled: false
+
+# Cluster mono-nœud : pas de haute disponibilité.
+redis-ha:
+  enabled: false
+dex:
+  enabled: false
+notifications:
+  enabled: false

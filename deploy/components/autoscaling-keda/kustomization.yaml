@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Autoscaling du serveur d'inférence sur sa file d'attente (KEDA, installé si enable_keda).
+# Utile à partir de 2 GPU : chaque réplica réclame un GPU entier.
+resources:
+  - scaledobject.yaml

@@ -1,0 +1,31 @@
+# Tempo 3.x (chart grafana-community, mode binaire unique).
+tempo:
+  retention: 72h
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  # Le "metrics generator" transforme les spans en métriques Prometheus :
+  #  - span-metrics   : traces_spanmetrics_* (taux, erreurs, latences) -> SLI des SLO
+  #  - service-graphs : carte des appels entre services dans Grafana
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: http://kube-prometheus-stack-prometheus.monitoring:9090/api/v1/write
+    processor:
+      span_metrics:
+        # Le seuil du SLO de latence (8 s) doit correspondre exactement à une borne.
+        histogram_buckets: [0.1, 0.25, 0.5, 1, 2, 4, 8.192, 16.384, 30, 60]
+  # Les processeurs doivent aussi être activés dans les overrides, sinon aucune métrique.
+  overrides:
+    defaults:
+      metrics_generator:
+        processors:
+          - service-graphs
+          - span-metrics
+
+persistence:
+  enabled: true
+  size: 10Gi

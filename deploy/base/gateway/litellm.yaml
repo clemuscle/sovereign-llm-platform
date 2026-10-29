@@ -58,9 +58,10 @@ spec:
             httpGet: { path: /health/liveliness, port: http }
             initialDelaySeconds: 60
             periodSeconds: 20
+          # ~750 Mi en régime établi, pic au-delà de 1 Gi au démarrage (OOMKilled à 1 Gi).
           resources:
-            requests: { cpu: 200m, memory: 512Mi }
-            limits: { memory: 1Gi }
+            requests: { cpu: 200m, memory: 768Mi }
+            limits: { memory: 2Gi }
           securityContext:
             allowPrivilegeEscalation: false
           volumeMounts:

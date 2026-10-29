@@ -11,6 +11,15 @@ spec:
   type: Declarative
   declarative:
     modelConfig: local-llm
+    # Les sorties d'outils (describe, logs) font plusieurs milliers de tokens : sans
+    # compaction, une conversation de quelques questions dépasse le contexte du modèle
+    # local (16k en gpu-local). Au-delà du seuil, l'historique ancien est résumé.
+    context:
+      compaction:
+        tokenThreshold: 8000 # la moitié du contexte : marge pour la question suivante
+        compactionInterval: 1
+        overlapSize: 1
+        summarizer: {} # résumé par le modèle de l'agent, au lieu d'un simple oubli
     systemMessage: |
       Tu es {{.AgentName}}, un ingénieur SRE qui diagnostique un cluster Kubernetes (k3s).
       Tu réponds en français.

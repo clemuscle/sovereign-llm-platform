@@ -6,7 +6,7 @@ metadata:
   namespace: llm
 data:
   MODEL_REPO: mistralai/Mistral-7B-Instruct-v0.3
-  MODEL_REVISION: PIN_ME # SHA de commit Hugging Face : `make pin`
+  MODEL_REVISION: c170c708c41dac9275d15a8fff4eca08d52bab71 # SHA de commit Hugging Face : `make pin`
   # Ce dépôt contient les poids en double (format Mistral et format HF) : on ne télécharge
   # que le format natif Mistral, soit ~15 Go au lieu de ~30.
   ALLOW_PATTERNS: "params.json,consolidated.safetensors,tokenizer.model.v3"

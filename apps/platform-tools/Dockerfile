@@ -14,7 +14,9 @@ COPY requirements.lock .
 RUN python -m venv /venv && /venv/bin/pip install --no-cache-dir -r requirements.lock
 
 FROM python:3.12-slim
-ENV PATH="/venv/bin:$PATH" PYTHONUNBUFFERED=1 HF_HUB_DISABLE_TELEMETRY=1
+# Pas de répertoire personnel (--no-create-home) : caches et journaux de huggingface_hub / xet dans /tmp.
+ENV PATH="/venv/bin:$PATH" PYTHONUNBUFFERED=1 HF_HUB_DISABLE_TELEMETRY=1 \
+    HF_HOME=/tmp/huggingface
 RUN useradd --uid 10001 --no-create-home fetcher
 COPY --from=build /usr/local/bin/oras /usr/local/bin/oras
 COPY --from=build /venv /venv

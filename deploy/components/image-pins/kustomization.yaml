@@ -5,23 +5,30 @@
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 images:
-  - name: rag-app
-    newName: ghcr.io/CHANGE_ME/sovereign-llm-platform/rag-app
-    newTag: 0.2.0
-  - name: platform-tools
-    newName: ghcr.io/CHANGE_ME/sovereign-llm-platform/platform-tools
-    newTag: 0.2.0
-  - name: vllm/vllm-openai
-    newTag: v0.32.0
-  - name: ghcr.io/ggml-org/llama.cpp
-    newTag: server-b11982
-  - name: ghcr.io/huggingface/text-embeddings-inference
-    newTag: cpu-1.9.4
-  - name: ghcr.io/berriai/litellm-database
-    newTag: main-v1.83.14-stable
-  - name: qdrant/qdrant
-    newTag: v1.20.0
-  - name: postgres
-    newTag: 17-alpine
-  - name: valkey/valkey
-    newTag: 9.1.3-alpine
+- name: rag-app
+  newName: ghcr.io/CHANGE_ME/sovereign-llm-platform/rag-app
+  newTag: 0.2.0
+- name: platform-tools
+  newName: ghcr.io/CHANGE_ME/sovereign-llm-platform/platform-tools
+  newTag: 0.2.0
+- name: vllm/vllm-openai
+  newTag: v0.32.0
+  digest: sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34
+- name: ghcr.io/ggml-org/llama.cpp
+  newTag: server-b11977
+  digest: sha256:01c2bc28d51291536df2ccebe5c6af1cdec9ea9b2bd98ac59556408caf96d3f8
+- name: ghcr.io/huggingface/text-embeddings-inference
+  newTag: cpu-1.9.4
+  digest: sha256:2538ea1c9640d3763b15af668039d24172d063b42337b0c27796fc2be180c78d
+- name: ghcr.io/berriai/litellm-database
+  newTag: main-v1.83.14-stable
+  digest: sha256:da4ab06d9d57da205263877425544d6df8e78147737b0dd8dc1e9e93a6d8ac2e
+- name: qdrant/qdrant
+  newTag: v1.20.0-unprivileged # runAsUser 1000 : /qdrant doit appartenir à l'utilisateur
+  digest: sha256:8c215051dc7bc15221b5f89c100a84a4b04d0dd8497fb73e6fa86fc948d1a41d
+- name: postgres
+  newTag: 17-alpine
+  digest: sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+- name: valkey/valkey
+  newTag: 9.1.3-alpine
+  digest: sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b

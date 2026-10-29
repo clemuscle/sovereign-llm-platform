@@ -1,0 +1,12 @@
+# Images construites localement (sans CI ni ghcr.io), servies par un registry Docker sur
+# localhost:5000 que containerd (k3s) accepte en HTTP. Placé après image-pins.
+#   docker build -t localhost:5000/sovereign-llm-platform/rag-app:local apps/rag && docker push ...
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+images:
+  - name: ghcr.io/CHANGE_ME/sovereign-llm-platform/rag-app
+    newName: localhost:5000/sovereign-llm-platform/rag-app
+    digest: sha256:a5dec5a4f71935953428319cd34eade390602caf258f7511f2b5d9f47e6fd472
+  - name: ghcr.io/CHANGE_ME/sovereign-llm-platform/platform-tools
+    newName: localhost:5000/sovereign-llm-platform/platform-tools
+    digest: sha256:a31d38953bf58718fbf253e7629a8e7e6e91517e293bfbb3b880b0df1a838042

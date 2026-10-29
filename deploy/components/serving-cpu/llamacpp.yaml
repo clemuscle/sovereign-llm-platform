@@ -5,7 +5,7 @@ metadata:
   namespace: llm
 data:
   MODEL_REPO: bartowski/Mistral-7B-Instruct-v0.3-GGUF
-  MODEL_REVISION: PIN_ME # SHA de commit Hugging Face : `make pin`
+  MODEL_REVISION: 61fd4167fff3ab01ee1cfe0da183fa27a944db48 # SHA de commit Hugging Face : `make pin`
   GGUF_FILE: Mistral-7B-Instruct-v0.3-Q4_K_M.gguf
   ALLOW_PATTERNS: Mistral-7B-Instruct-v0.3-Q4_K_M.gguf # un seul fichier parmi les ~20 quantisations du dépôt
   MODEL_DIGEST: ""
@@ -67,15 +67,23 @@ spec:
       containers:
         - name: llamacpp
           image: ghcr.io/ggml-org/llama.cpp
+          # Forme "--option valeur" : llama.cpp récent rejette "--option=valeur" (et remplace les
+          # "_" de la valeur par des "-", ce qui casse les noms de fichiers GGUF).
           args:
-            - --model=/models/llm/$(GGUF_FILE)
-            - --alias=$(SERVED_MODEL_NAME)
-            - --ctx-size=$(CTX_SIZE)
-            - --parallel=$(PARALLEL)
+            - --model
+            - /models/llm/$(GGUF_FILE)
+            - --alias
+            - $(SERVED_MODEL_NAME)
+            - --ctx-size
+            - $(CTX_SIZE)
+            - --parallel
+            - $(PARALLEL)
             - --jinja # template de chat du modèle : nécessaire aux appels d'outils et au JSON contraint
             - --metrics # /metrics au format Prometheus
-            - --host=0.0.0.0
-            - --port=8000
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
           envFrom:
             - configMapRef: { name: llm-model }
           ports:

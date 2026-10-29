@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Qwen2.5 7B Instruct en GGUF 4 bits (~4,7 Go, Apache 2.0) pour le profil cpu.
+# Son template de chat gère les appels d'outils (requis par les agents kagent) et le rôle
+# système, contrairement au GGUF de Mistral 7B v0.3 (supports_tools=false dans /props).
+patches:
+  - target:
+      kind: ConfigMap
+      name: llm-model
+    patch: |-
+      - op: replace
+        path: /data/MODEL_REPO
+        value: bartowski/Qwen2.5-7B-Instruct-GGUF
+      - op: replace
+        path: /data/MODEL_REVISION
+        value: 8911e8a47f92bac19d6f5c64a2e2095bd2f7d031
+      - op: replace
+        path: /data/GGUF_FILE
+        value: Qwen2.5-7B-Instruct-Q4_K_M.gguf
+      - op: replace
+        path: /data/ALLOW_PATTERNS
+        value: Qwen2.5-7B-Instruct-Q4_K_M.gguf
+      # 16k tokens par slot (PARALLEL=2) : un agent accumule les sorties de ses outils
+      # (événements Kubernetes en JSON) bien au-delà de 4k. Cache KV ~1,8 Go (GQA, 4 têtes KV).
+      - op: replace
+        path: /data/CTX_SIZE
+        value: "32768"

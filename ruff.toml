@@ -1,0 +1,12 @@
+# Règles communes aux scripts et tests hors applications (apps/* ont leur propre pyproject).
+line-length = 120
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+
+[lint.per-file-ignores]
+"tests/**" = ["S101", "E402"]
+"scripts/pin.py" = ["S603", "S607"]
+"tests/policy/*" = ["S603", "S607"]
+"tests/e2e/*" = ["S603", "S607"]

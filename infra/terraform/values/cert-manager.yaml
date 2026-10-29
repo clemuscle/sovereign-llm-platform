@@ -1,0 +1,2 @@
+crds:
+  enabled: true # CRD installées et mises à jour avec le chart

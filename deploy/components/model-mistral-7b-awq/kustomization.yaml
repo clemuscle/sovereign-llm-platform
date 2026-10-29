@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# GPU de 12 à 16 Go : Mistral 7B quantisé AWQ 4 bits (~4 Go de poids au lieu de ~15).
+# À ajouter après serving-gpu dans la liste des composants d'un overlay.
+# Remplace MODEL_REPO par un dépôt AWQ de Mistral-7B-Instruct-v0.3 de ton choix
+# (huggingface.co, recherche "Mistral-7B-Instruct-v0.3 AWQ"), puis `make pin`.
+patches:
+  - target:
+      kind: ConfigMap
+      name: llm-model
+    patch: |-
+      - op: replace
+        path: /data/MODEL_REPO
+        value: CHANGE_ME/Mistral-7B-Instruct-v0.3-AWQ
+      - op: replace
+        path: /data/MODEL_REVISION
+        value: PIN_ME
+      - op: replace
+        path: /data/ALLOW_PATTERNS
+        value: "*.json,*.safetensors,tokenizer.model"
+      # Poids AWQ au format Hugging Face ; vLLM détecte la quantization dans config.json.
+      - op: replace
+        path: /data/TOKENIZER_MODE
+        value: auto
+      - op: replace
+        path: /data/CONFIG_FORMAT
+        value: auto
+      - op: replace
+        path: /data/LOAD_FORMAT
+        value: auto
+      - op: replace
+        path: /data/MAX_MODEL_LEN
+        value: "4096"

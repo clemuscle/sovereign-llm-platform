@@ -1,0 +1,32 @@
+# Gateway LLM, compatible API OpenAI.
+# Les clients ne connaissent que deux noms logiques : "chat" et "embed".
+# Chaque serveur de modèle expose son modèle sous le nom "llm" (ConfigMap llm-model) :
+# changer de modèle ou de moteur ne touche ni cette configuration ni les clients.
+
+model_list:
+  - model_name: chat
+    litellm_params:
+      model: openai/llm # préfixe "openai/" = backend compatible OpenAI
+      api_base: http://llm.llm.svc.cluster.local:8000/v1
+      api_key: "not-checked-by-backend"
+      timeout: 120
+  - model_name: embed
+    litellm_params:
+      model: openai/embed
+      api_base: http://embeddings.llm.svc.cluster.local/v1
+      api_key: "not-checked-by-backend"
+
+litellm_settings:
+  drop_params: true # ignore les paramètres non supportés par un backend au lieu d'échouer
+  num_retries: 2
+  callbacks: ["otel"] # une trace OpenTelemetry par appel
+
+router_settings:
+  # État partagé entre réplicas : les quotas par clé (rpm) restent justes avec N instances.
+  redis_host: litellm-redis
+  redis_port: 6379
+  redis_password: os.environ/REDIS_PASSWORD
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL # clés virtuelles et suivi de consommation

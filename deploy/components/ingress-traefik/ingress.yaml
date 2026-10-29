@@ -1,0 +1,74 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rag-app
+  namespace: llm
+  annotations:
+    cert-manager.io/issuer: llm-platform-ca
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [rag.localhost]
+      secretName: rag-app-tls
+  rules:
+    - host: rag.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rag-app
+                port:
+                  name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: litellm
+  namespace: llm
+  annotations:
+    cert-manager.io/issuer: llm-platform-ca
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [api.localhost]
+      secretName: litellm-tls
+  rules:
+    - host: api.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: litellm
+                port:
+                  name: http
+---
+# Entrée autorisée depuis les seuls pods Traefik (et non tout le namespace kube-system).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-ingress-controller
+  namespace: llm
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: ["rag-app", "litellm"]
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - port: 8080
+        - port: 4000

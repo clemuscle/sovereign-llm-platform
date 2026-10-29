@@ -1,0 +1,57 @@
+# k3s embarque etcd, scheduler, controller-manager et kube-proxy dans un seul binaire :
+# on coupe ces cibles pour éviter des alertes "target down" inutiles.
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    # Prend en compte tous les ServiceMonitor / PodMonitor / PrometheusRule du cluster,
+    # pas seulement ceux portant le label de la release Helm.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    # Réception des métriques poussées par l'OpenTelemetry Collector et Tempo.
+    enableRemoteWriteReceiver: true
+    enableFeatures:
+      - exemplar-storage # lien métrique -> trace dans Grafana
+
+grafana:
+  # Pas d'Ingress : console d'administration accessible par `make grafana` (port-forward).
+  ingress:
+    enabled: false
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL # charge les dashboards livrés par les workloads (ConfigMap)
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      url: http://loki.monitoring:3100
+      jsonData:
+        derivedFields:
+          # Les logs applicatifs contiennent "trace_id=<id>" : lien direct log -> trace.
+          - name: trace_id
+            matcherRegex: "trace_id=(\\w+)"
+            datasourceUid: tempo
+            url: "$${__value.raw}"
+    - name: Tempo
+      uid: tempo
+      type: tempo
+      url: http://tempo.monitoring:3200 # port HTTP de Tempo 3.x
+      jsonData:
+        tracesToLogsV2:
+          datasourceUid: loki
+          filterByTraceID: true
+        serviceMap:
+          datasourceUid: prometheus
+        nodeGraph:
+          enabled: true

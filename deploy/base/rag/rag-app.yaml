@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-app
+  labels:
+    app.kubernetes.io/name: rag-app
+    app.kubernetes.io/component: application
+spec:
+  replicas: 2 # sans état : tout est dans Qdrant
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rag-app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rag-app
+        app.kubernetes.io/component: application
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: rag-app
+      containers:
+        - name: rag-app
+          image: rag-app
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: LLM_BASE_URL
+              value: http://litellm:4000/v1
+            - name: LLM_API_KEY # clé virtuelle propre à ce client (quota et traçabilité dédiés)
+              valueFrom:
+                secretKeyRef: { name: litellm-keys, key: RAG_KEY }
+            - name: CHAT_MODEL
+              value: chat
+            - name: EMBED_MODEL
+              value: embed
+            - name: QDRANT_URL
+              value: http://qdrant:6333
+            - name: INGEST_API_KEY
+              valueFrom:
+                secretKeyRef: { name: rag-api-keys, key: INGEST_API_KEY }
+            - name: QUERY_API_KEY
+              valueFrom:
+                secretKeyRef: { name: rag-api-keys, key: QUERY_API_KEY }
+            - name: OTEL_SERVICE_NAME
+              value: rag-app
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.monitoring:4317
+            - name: OTEL_SEMCONV_STABILITY_OPT_IN
+              value: gen_ai_latest_experimental # dernière version des conventions gen_ai.*
+            - name: OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
+              value: "false" # pas de contenu de prompt dans les traces (données sensibles)
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rag-app
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rag-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-app
+  labels:
+    app.kubernetes.io/name: rag-app
+spec:
+  selector:
+    app.kubernetes.io/name: rag-app
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Petit modèle pour les tests de bout en bout en CI (runner sans GPU, 4 vCPU) :
+# Qwen2.5 0.5B Instruct en GGUF 4 bits (~400 Mo). Démontre au passage qu'un changement de
+# modèle se fait uniquement par configuration.
+patches:
+  - target:
+      kind: ConfigMap
+      name: llm-model
+    patch: |-
+      - op: replace
+        path: /data/MODEL_REPO
+        value: Qwen/Qwen2.5-0.5B-Instruct-GGUF
+      - op: replace
+        path: /data/MODEL_REVISION
+        value: PIN_ME
+      - op: replace
+        path: /data/GGUF_FILE
+        value: qwen2.5-0.5b-instruct-q4_k_m.gguf
+      - op: replace
+        path: /data/ALLOW_PATTERNS
+        value: qwen2.5-0.5b-instruct-q4_k_m.gguf
+      - op: replace
+        path: /data/CTX_SIZE
+        value: "4096"
+  - target:
+      kind: StatefulSet
+      name: llm
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value: { requests: { cpu: 500m, memory: 1Gi }, limits: { memory: 2Gi } }

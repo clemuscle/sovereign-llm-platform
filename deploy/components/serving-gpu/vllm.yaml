@@ -1,0 +1,196 @@
+# Paramètres du modèle servi : seul endroit à modifier pour changer de modèle.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-model
+  namespace: llm
+data:
+  MODEL_REPO: mistralai/Mistral-7B-Instruct-v0.3
+  MODEL_REVISION: PIN_ME # SHA de commit Hugging Face : `make pin`
+  # Ce dépôt contient les poids en double (format Mistral et format HF) : on ne télécharge
+  # que le format natif Mistral, soit ~15 Go au lieu de ~30.
+  ALLOW_PATTERNS: "params.json,consolidated.safetensors,tokenizer.model.v3"
+  MODEL_DIGEST: ""
+  SERVED_MODEL_NAME: llm # nom stable vu par LiteLLM, quel que soit le modèle
+  TOKENIZER_MODE: mistral # "auto" pour un modèle au format Hugging Face
+  CONFIG_FORMAT: mistral
+  LOAD_FORMAT: mistral
+  TOOL_CALL_PARSER: mistral # dépend de la famille du modèle (hermes, llama3_json...)
+  MAX_MODEL_LEN: "8192"
+  GPU_MEMORY_UTILIZATION: "0.90"
+---
+# StatefulSet plutôt que Deployment :
+#  - chaque réplica a son propre volume de poids (volumeClaimTemplates) : passage à N réplicas
+#    possible, même avec un stockage ReadWriteOnce local au nœud ;
+#  - la mise à jour arrête l'ancien pod avant de créer le nouveau : pas de blocage sur un GPU unique.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: llm
+  namespace: llm
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: serving
+spec:
+  serviceName: llm-pods
+  replicas: 1
+  podManagementPolicy: Parallel # passage à l'échelle sans attendre le pod précédent
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vllm
+        app.kubernetes.io/component: serving
+        llm.platform/model-fetch: "true"
+    spec:
+      runtimeClassName: nvidia
+      automountServiceAccountToken: false
+      nodeSelector:
+        nvidia.com/gpu.present: "true" # label posé par GPU Feature Discovery
+      tolerations:
+        - key: nvidia.com/gpu # les nœuds GPU sont souvent "taintés" pour les réserver
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: fetch-model
+          image: platform-tools
+          envFrom:
+            - configMapRef: { name: llm-model }
+            - configMapRef: { name: model-source }
+          env:
+            - name: MODEL_DIR
+              value: /models/llm
+            - name: HF_TOKEN # Mistral 7B v0.3 est un modèle "gated"
+              valueFrom:
+                secretKeyRef: { name: hf-token, key: HF_TOKEN, optional: true }
+          resources:
+            requests: { cpu: 200m, memory: 512Mi }
+            limits: { memory: 2Gi }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai
+          # $(VAR) : substitué par Kubernetes depuis le ConfigMap llm-model.
+          args:
+            - /models/llm # dossier local rempli par fetch-model : démarrage hors ligne
+            - --served-model-name=$(SERVED_MODEL_NAME)
+            - --tokenizer-mode=$(TOKENIZER_MODE)
+            - --config-format=$(CONFIG_FORMAT)
+            - --load-format=$(LOAD_FORMAT)
+            - --max-model-len=$(MAX_MODEL_LEN)
+            - --gpu-memory-utilization=$(GPU_MEMORY_UTILIZATION)
+            - --enable-prefix-caching # réutilise le KV cache des préfixes communs (prompt système, RAG)
+            - --enable-auto-tool-choice # appels d'outils, exigés par kagent
+            - --tool-call-parser=$(TOOL_CALL_PARSER)
+            - --port=8000
+          envFrom:
+            - configMapRef: { name: llm-model }
+          env:
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            - name: TRANSFORMERS_OFFLINE
+              value: "1"
+            - name: VLLM_NO_USAGE_STATS
+              value: "1"
+            - name: DO_NOT_TRACK
+              value: "1"
+          ports:
+            - name: http
+              containerPort: 8000
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            failureThreshold: 60 # chargement des poids en VRAM et compilation (téléchargement : initContainer)
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests: { cpu: "2", memory: 16Gi }
+            limits:
+              memory: 24Gi
+              nvidia.com/gpu: 1
+          securityContext:
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: models
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 40Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-pods
+  namespace: llm
+  labels:
+    app.kubernetes.io/name: vllm
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: vllm
+  ports:
+    - name: http
+      port: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm
+  namespace: llm
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: serving
+spec:
+  selector:
+    app.kubernetes.io/name: vllm
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: llm
+  namespace: llm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+      app.kubernetes.io/component: serving
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

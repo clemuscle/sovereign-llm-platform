@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Mode air-gapped : les poids viennent de la registry OCI interne (Zot), où ils ont été
+# poussés au préalable (`make stage-model`). Aucun pod n'a accès à Internet.
+resources:
+  - model-source.yaml

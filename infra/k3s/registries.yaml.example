@@ -1,0 +1,19 @@
+# /etc/rancher/k3s/registries.yaml — mode air-gapped.
+# containerd tire TOUTES les images depuis la registry interne (Zot, NodePort 30500), qui
+# contient les copies poussées par `make mirror-images`. Les références d'images (et leurs
+# digests) restent inchangées dans les manifests : le miroir est transparent.
+# Après modification : sudo systemctl restart k3s
+#
+# Autres distributions : même principe avec la configuration "registry mirrors" de containerd
+# (hosts.toml) ou de CRI-O (registries.conf).
+mirrors:
+  docker.io:
+    endpoint: ["http://127.0.0.1:30500"]
+  ghcr.io:
+    endpoint: ["http://127.0.0.1:30500"]
+  quay.io:
+    endpoint: ["http://127.0.0.1:30500"]
+  registry.k8s.io:
+    endpoint: ["http://127.0.0.1:30500"]
+  nvcr.io:
+    endpoint: ["http://127.0.0.1:30500"]

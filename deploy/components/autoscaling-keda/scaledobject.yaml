@@ -1,0 +1,26 @@
+# Pourquoi pas un HPA sur le CPU ou la mémoire : un serveur LLM pré-alloue sa VRAM et sature
+# son GPU bien avant le CPU. Le bon signal est la file d'attente du moteur
+# (llm:requests_waiting, règle commune à vLLM et llama.cpp).
+#
+# Limite connue : derrière un Service Kubernetes classique, les requêtes sont réparties sans
+# tenir compte du KV cache déjà présent sur chaque réplica (prefix caching moins efficace).
+# Étape suivante : routage "cache-aware" avec llm-d / Gateway API Inference Extension.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: llm
+  namespace: llm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: llm
+  minReplicaCount: 1
+  maxReplicaCount: 2 # = nombre de GPU disponibles
+  cooldownPeriod: 900 # un réplica coûte cher à démarrer (chargement des poids) : on ne le retire pas trop vite
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://kube-prometheus-stack-prometheus.monitoring.svc:9090
+        query: max(llm:requests_waiting)
+        threshold: "3"

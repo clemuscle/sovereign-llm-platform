@@ -1,0 +1,21 @@
+# Secrets et état local : jamais dans Git
+.secrets/
+*.tfvars
+!*.tfvars.example
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl.bak
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Résultats de benchmark bruts (le résumé va dans docs/benchmark.md)
+bench/results.json
+
+# Généré par `make test-alerts`
+tests/prometheus/rules.yaml

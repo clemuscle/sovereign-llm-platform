@@ -1,0 +1,14 @@
+# Le modèle des agents : le LLM auto-hébergé, joint via la gateway LiteLLM.
+# Aucune requête ne sort du cluster.
+# Le secret kagent-litellm contient la clé virtuelle LiteLLM propre à kagent (make seal-secrets).
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: local-llm
+spec:
+  provider: OpenAI
+  model: chat # nom logique routé par LiteLLM (indépendant du modèle réel)
+  apiKeySecret: kagent-litellm
+  apiKeySecretKey: LITELLM_API_KEY
+  openAI:
+    baseUrl: http://litellm.llm.svc.cluster.local:4000/v1

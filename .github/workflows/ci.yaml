@@ -1,0 +1,235 @@
+# Intégration et livraison continues.
+#
+#   python, repo, manifests, terraform  : qualité et validation statique (chaque PR)
+#   images                              : build, scan Trivy, publication GHCR par digest (main)
+#   e2e                                 : déploiement réel sur kind (petit modèle CPU) + tests
+#   promote                             : inscrit les nouveaux digests dans Git (main) -> ArgoCD
+#
+# Toutes les actions sont figées par SHA de commit (version en commentaire, mises à jour
+# proposées par Dependabot) : une action compromise ne peut pas s'introduire par un tag déplacé.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  KUSTOMIZE_VERSION: v5.8.3
+  KUBECONFORM_VERSION: v0.8.0
+  PROMETHEUS_VERSION: 3.15.1
+  PROMETHEUS_OPERATOR_VERSION: v0.94.2
+
+jobs:
+  python:
+    name: Python (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [rag, platform-tools]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/${{ matrix.app }}/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check . && ruff format --check .
+      - run: pytest -q
+
+  repo:
+    name: Scripts, alertes et shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml pytest ruff httpx
+      - run: ruff check scripts tests bench && ruff format --check scripts tests bench
+      - run: pytest -q tests/unit
+      - uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          scandir: .
+      - name: Tests unitaires des alertes Prometheus (promtool)
+        run: |
+          curl -sSL "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz" \
+            | tar xz --strip-components=1 --wildcards '*/promtool'
+          sudo mv promtool /usr/local/bin/
+          make test-alerts
+
+  manifests:
+    name: Manifests Kubernetes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Installer kustomize et kubeconform
+        run: |
+          curl -sSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" | tar xz
+          curl -sSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" | tar xz
+          sudo mv kustomize kubeconform /usr/local/bin/
+          pip install pyyaml
+      - run: make validate # schémas + audit des références et des flux réseau
+      - name: Éléments non figés (informatif ; figés automatiquement par le job promote)
+        run: python3 scripts/pin.py check || true
+
+  terraform:
+    name: Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+      - run: terraform -chdir=infra/terraform fmt -check -recursive
+      - run: terraform -chdir=infra/terraform init -backend=false
+      - run: terraform -chdir=infra/terraform validate
+
+  images:
+    name: Image ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    needs: [python]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image: [rag-app, platform-tools]
+        include:
+          - image: rag-app
+            context: apps/rag
+          - image: platform-tools
+            context: apps/platform-tools
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build local pour le scan
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          load: true
+          tags: ${{ matrix.image }}:scan
+      - name: Scan de vulnérabilités (bloquant sur CRITICAL/HIGH corrigeables)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ matrix.image }}:scan
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Connexion à GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publication multi-architecture
+        id: push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: true
+          sbom: true
+          tags: ghcr.io/${{ github.repository_owner }}/sovereign-llm-platform/${{ matrix.image }}:${{ github.sha }}
+      - name: Enregistrer le digest
+        if: steps.push.outcome == 'success'
+        run: echo "${{ steps.push.outputs.digest }}" > digest-${{ matrix.image }}.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.push.outcome == 'success'
+        with:
+          name: digest-${{ matrix.image }}
+          path: digest-${{ matrix.image }}.txt
+
+  e2e:
+    name: Bout en bout (kind, profil CPU, petit modèle)
+    runs-on: ubuntu-latest
+    needs: [python, manifests]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml huggingface_hub
+      - name: Installer kustomize
+        run: |
+          curl -sSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" | tar xz
+          sudo mv kustomize /usr/local/bin/
+      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          version: v0.33.0 # kindnet applique les NetworkPolicy depuis kind v0.24
+          cluster_name: e2e
+      - name: Construire et charger les images dans kind
+        run: |
+          docker build -t rag-app:e2e apps/rag
+          docker build -t platform-tools:e2e apps/platform-tools
+          kind load docker-image rag-app:e2e platform-tools:e2e --name e2e
+      - name: CRD de prometheus-operator (ServiceMonitor, PrometheusRule)
+        run: |
+          base="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/${PROMETHEUS_OPERATOR_VERSION}/example/prometheus-operator-crd"
+          kubectl apply --server-side -f "$base/monitoring.coreos.com_servicemonitors.yaml" -f "$base/monitoring.coreos.com_prometheusrules.yaml"
+      - name: Figer les révisions de modèles et préparer l'overlay
+        run: |
+          python3 scripts/pin.py models
+          python3 tests/e2e/render-overlay.py > /tmp/e2e.yaml
+      - name: Déployer
+        run: |
+          KEYS_FILE=/tmp/e2e-keys.env tests/e2e/create-secrets.sh
+          kubectl apply --server-side -f /tmp/e2e.yaml
+      - name: Tests de bout en bout
+        run: KEYS_FILE=/tmp/e2e-keys.env tests/e2e/smoke.sh
+      - name: Diagnostic en cas d'échec
+        if: failure()
+        run: |
+          kubectl -n llm get pods,pvc,jobs -o wide
+          kubectl -n llm describe pods | tail -200
+          for p in $(kubectl -n llm get pods -o name); do echo "=== $p"; kubectl -n llm logs "$p" --all-containers --tail=60 || true; done
+
+  promote:
+    name: Promotion GitOps
+    runs-on: ubuntu-latest
+    needs: [images, e2e, terraform, repo]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml huggingface_hub
+      - uses: imjasonh/setup-crane@feee3b6bb0d4c68370f256a4502498c9227e5c6b # v0.7
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          merge-multiple: true
+      - name: Inscrire les digests et figer le reste
+        run: |
+          python3 scripts/pin.py owner "${{ github.repository_owner }}"
+          python3 scripts/pin.py set-image rag-app "$(cat digest-rag-app.txt)"
+          python3 scripts/pin.py set-image platform-tools "$(cat digest-platform-tools.txt)"
+          python3 scripts/pin.py images
+          python3 scripts/pin.py models
+          python3 scripts/pin.py check
+      - name: Commit de promotion (ArgoCD déploie ce commit)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deploy/
+          git diff --cached --quiet && { echo "rien à promouvoir"; exit 0; }
+          git commit -m "chore(deploy): promotion des images ${GITHUB_SHA::7} [skip ci]"
+          git push

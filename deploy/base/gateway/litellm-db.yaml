@@ -1,0 +1,73 @@
+# PostgreSQL de LiteLLM : clés virtuelles, budgets et journal de consommation.
+# Instance unique volontairement simple ; en production : opérateur CloudNativePG ou base managée.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: litellm-db
+  labels:
+    app.kubernetes.io/name: litellm-db
+    app.kubernetes.io/component: database
+spec:
+  serviceName: litellm-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: litellm-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: litellm-db
+        app.kubernetes.io/component: database
+    spec:
+      securityContext:
+        fsGroup: 70 # utilisateur postgres de l'image alpine
+      containers:
+        - name: postgres
+          image: postgres
+          env:
+            - name: POSTGRES_USER
+              value: litellm
+            - name: POSTGRES_DB
+              value: litellm
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: litellm-db, key: POSTGRES_PASSWORD }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "litellm", "-d", "litellm"]
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm-db
+  labels:
+    app.kubernetes.io/name: litellm-db
+spec:
+  selector:
+    app.kubernetes.io/name: litellm-db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

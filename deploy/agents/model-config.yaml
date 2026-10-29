@@ -12,3 +12,6 @@ spec:
   apiKeySecretKey: LITELLM_API_KEY
   openAI:
     baseUrl: http://litellm.llm.svc.cluster.local:4000/v1
+    # Diagnostic reproductible : un petit modèle quantifié décide d'appeler (ou non) ses
+    # outils de façon aléatoire au-delà d'une température faible.
+    temperature: "0.1"

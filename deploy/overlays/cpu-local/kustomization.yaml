@@ -14,6 +14,7 @@ resources:
 components:
   - ../../components/serving-cpu
   - ../../components/model-source-hf
+  - ../../components/model-qwen2.5-7b # appels d'outils pour kagent
   - ../../components/ingress-traefik
   - ../../components/image-pins
   - ../../components/image-local # après image-pins : remplace les images publiées par la CI

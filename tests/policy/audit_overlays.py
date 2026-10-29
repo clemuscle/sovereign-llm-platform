@@ -101,10 +101,10 @@ for name in sys.argv[1:] or OVERLAYS:
     pols = [d for d in docs if d["kind"] == "NetworkPolicy"]
     pods = {}
     for d in docs:
-        if not d["metadata"].get("namespace"):
+        if not d["metadata"].get("namespace") and d["kind"] != "Namespace":
             errors.append(f"{name}: {d['kind']}/{d['metadata']['name']} sans namespace")
         tpl = d.get("spec", {}).get("template")
-        if not tpl:
+        if not tpl or "spec" not in tpl:  # SealedSecret : spec.template sans pod
             continue
         ns = d["metadata"]["namespace"]
         spec = tpl["spec"]

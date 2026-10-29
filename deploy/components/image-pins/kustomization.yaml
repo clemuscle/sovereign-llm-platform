@@ -6,11 +6,13 @@ apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 images:
 - name: rag-app
-  newName: ghcr.io/CHANGE_ME/sovereign-llm-platform/rag-app
+  newName: ghcr.io/clemuscle/sovereign-llm-platform/rag-app
   newTag: 0.2.0
+  digest: sha256:a4b4a40ce2af2c695aaa053f48548ecd3e214e1d34ddf46d01e740c2ef7949e6
 - name: platform-tools
-  newName: ghcr.io/CHANGE_ME/sovereign-llm-platform/platform-tools
+  newName: ghcr.io/clemuscle/sovereign-llm-platform/platform-tools
   newTag: 0.2.0
+  digest: sha256:71fa52e4e65b0afe9b787e599f76e51da3def612a11981ea51065f145d94b943
 - name: vllm/vllm-openai
   newTag: v0.32.0
   digest: sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34
@@ -24,7 +26,7 @@ images:
   newTag: main-v1.83.14-stable
   digest: sha256:da4ab06d9d57da205263877425544d6df8e78147737b0dd8dc1e9e93a6d8ac2e
 - name: qdrant/qdrant
-  newTag: v1.20.0-unprivileged # runAsUser 1000 : /qdrant doit appartenir à l'utilisateur
+  newTag: v1.20.0-unprivileged
   digest: sha256:8c215051dc7bc15221b5f89c100a84a4b04d0dd8497fb73e6fa86fc948d1a41d
 - name: postgres
   newTag: 17-alpine

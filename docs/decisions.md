@@ -51,6 +51,11 @@ qu'à joindre la registry interne.
 **Limite.** Une NetworkPolicy filtre par IP : restreindre à `huggingface.co` exige une politique
 FQDN (Cilium) ou un proxy de sortie. Télémétries d'éditeurs coupées explicitement (vLLM, Qdrant,
 Hugging Face, grille tarifaire LiteLLM).
+**Limite.** kube-router (k3s) et kindnet (kind) appliquent les règles d'un nouveau pod en différé :
+mesuré sur k3s, une requête vers Internet émise dès le démarrage passe (HTTP 200), la même après
+5 s est bloquée. Un conteneur compromis pourrait exfiltrer pendant cette fenêtre. Les CNI qui
+ne laissent passer aucun trafic avant que les règles soient en place (Calico, Cilium) la
+suppriment ; le test e2e vérifie le régime établi.
 
 ## 7. StatefulSet pour les serveurs de modèle
 

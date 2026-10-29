@@ -60,9 +60,11 @@ COUNT=$(curl -sf "$API/documents/guide-gpu" -H "Authorization: Bearer $INGEST_AP
 expect "$CHUNKS chunks -> 1, aucun orphelin" "chunks restants : $COUNT" test "$COUNT" = 1
 
 echo "5. Isolation réseau (egress default-deny)"
+# kindnet et kube-router programment les règles d'un nouveau pod en différé : la première
+# seconde n'est pas filtrée (docs/decisions.md, n° 6). On teste le régime établi.
 if kubectl -n $NS run egress-probe --rm -i --restart=Never --quiet --image=curlimages/curl:8.17.0 \
   --labels=app.kubernetes.io/name=egress-probe --command -- \
-  curl -s -m 8 -o /dev/null https://example.com 2>/dev/null; then
+  sh -c 'sleep 10; curl -s -m 8 -o /dev/null https://example.com' 2>/dev/null; then
   fail "un pod du namespace llm atteint Internet"
 fi
 pass "sortie Internet bloquée"

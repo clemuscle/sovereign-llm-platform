@@ -7,7 +7,7 @@ metadata:
   name: embed-model
 data:
   MODEL_REPO: intfloat/multilingual-e5-small
-  MODEL_REVISION: PIN_ME # SHA de commit Hugging Face : `make pin`
+  MODEL_REVISION: 614241f622f53c4eeff9890bdc4f31cfecc418b3 # SHA de commit Hugging Face : `make pin`
   ALLOW_PATTERNS: "*.json,*.safetensors,*.txt,sentencepiece.bpe.model,1_Pooling/*"
   MODEL_DIGEST: "" # mode air-gapped : digest de l'artefact OCI (optionnel, renforce la garantie)
 ---
@@ -67,6 +67,9 @@ spec:
           args:
             - --model-id=/data/model # dossier local : aucun accès réseau au démarrage
             - --port=80
+            # Par défaut un worker par cœur du nœud (pas de la limite du pod), chacun avec son
+            # tokenizer multilingue : OOM au-delà de quelques cœurs.
+            - --tokenization-workers=2
           env:
             - name: HF_HUB_OFFLINE
               value: "1"

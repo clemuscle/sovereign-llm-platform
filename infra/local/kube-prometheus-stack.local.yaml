@@ -1,0 +1,11 @@
+# Surcharge locale (WSL2, plateforme minimale) : ni Loki ni Tempo installés.
+grafana:
+  additionalDataSources: []
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests: { memory: 64Mi }
+# WSL2 : "/" n'est pas un montage partagé, node-exporter ne peut pas le monter (rslave).
+prometheus-node-exporter:
+  hostRootFsMount:
+    enabled: false

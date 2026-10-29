@@ -1,0 +1,6 @@
+# Surcharge locale (WSL2, plateforme minimale) : pas d'OpenTelemetry Collector, pas de MCP Grafana.
+otel:
+  tracing:
+    enabled: false
+grafana-mcp:
+  enabled: false

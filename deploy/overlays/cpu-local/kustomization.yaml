@@ -3,11 +3,12 @@ kind: Kustomization
 
 # Profil cpu sur un poste de dev (k3s sous WSL2, 15 Go de RAM), déployé sans ArgoCD :
 #   kubectl apply -k deploy/overlays/cpu-local --server-side
-# Plateforme minimale : cert-manager, Sealed Secrets, kube-prometheus-stack (ni kagent, ni
+# Plateforme minimale : cert-manager, Sealed Secrets, kube-prometheus-stack, kagent (ni
 # Loki / Tempo / OTel Collector), images rag-app et platform-tools construites localement.
 resources:
   - namespace.yaml
   - ../../base
+  - ../../agents
   - ../../secrets
 
 components:
@@ -35,12 +36,3 @@ patches:
       - op: replace
         path: /spec/replicas
         value: 1
-  # kagent n'est pas installé : son secret n'a pas de namespace cible.
-  - target: { kind: SealedSecret, name: kagent-litellm }
-    patch: |-
-      $patch: delete
-      apiVersion: bitnami.com/v1alpha1
-      kind: SealedSecret
-      metadata:
-        name: kagent-litellm
-        namespace: kagent

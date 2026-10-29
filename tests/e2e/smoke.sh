@@ -70,7 +70,12 @@ fi
 pass "sortie Internet bloquée"
 
 echo "6. Idempotence du bootstrap des clés"
-kubectl -n $NS create job litellm-keys-rerun --from=job/litellm-keys-bootstrap >/dev/null
+# create job --from n'accepte qu'un CronJob : copie du Job sans ce que le contrôleur y a ajouté.
+kubectl -n $NS get job litellm-keys-bootstrap -o json | jq '
+  .metadata = {name: "litellm-keys-rerun", namespace: .metadata.namespace}
+  | del(.status, .spec.selector)
+  | .spec.template.metadata.labels |= with_entries(select(.key | test("controller-uid|job-name") | not))
+' | kubectl create -f - >/dev/null
 kubectl -n $NS wait --for=condition=complete job/litellm-keys-rerun --timeout=3m >/dev/null
 LOGS=$(kubectl -n $NS logs job/litellm-keys-rerun)
 grep -q "created" <<<"$LOGS" && fail "le second passage a recréé des clés : $LOGS"

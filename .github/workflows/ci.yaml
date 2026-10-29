@@ -196,8 +196,13 @@ jobs:
         if: failure()
         run: |
           kubectl -n llm get pods,pvc,jobs -o wide
-          kubectl -n llm describe pods | tail -200
-          for p in $(kubectl -n llm get pods -o name); do echo "=== $p"; kubectl -n llm logs "$p" --all-containers --tail=60 || true; done
+          for p in $(kubectl -n llm get pods -o name); do
+            echo "=== $p"
+            kubectl -n llm describe "$p" | sed -n '/^Containers:/,/^Conditions:/p;/^Events:/,$p'
+            kubectl -n llm logs "$p" --all-containers --tail=60 || true
+            # Conteneur redémarré (CrashLoopBackOff, OOMKilled) : la cause est dans l'instance précédente.
+            kubectl -n llm logs "$p" --all-containers --previous --tail=60 2>/dev/null || true
+          done
 
   promote:
     name: Promotion GitOps

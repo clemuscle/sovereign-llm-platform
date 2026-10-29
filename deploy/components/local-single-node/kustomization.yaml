@@ -13,12 +13,6 @@ patches:
       - op: replace
         path: /spec/replicas
         value: 1
-  # OOMKilled au démarrage avec la limite de 1 Gi de la base.
-  - target: { kind: Deployment, name: litellm }
-    patch: |-
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/limits/memory
-        value: 2Gi
   - target: { kind: Deployment, name: rag-app }
     patch: |-
       - op: replace

@@ -109,8 +109,35 @@ Règle de calcul : VRAM ≈ poids du modèle + KV cache + ~1 Go de marge CUDA.
 |---|---|---|
 | 24 Go (RTX 3090/4090, L4) | Mistral 7B en BF16, contexte 8k | défaut |
 | 12-16 Go (RTX 3060/4070, T4) | Mistral 7B quantisé AWQ 4 bits, contexte 4k | composant `model-mistral-7b-awq` dans l'overlay |
-| 8 Go | idem, contexte 2k | même composant, `MAX_MODEL_LEN: "2048"` |
+| 8 Go | idem, contexte 2k ; ou Qwen3 4B AWQ, contexte 16k (agents kagent) | même composant, `MAX_MODEL_LEN: "2048"` ; ou `model-qwen3-4b-awq` |
 | Pas de GPU NVIDIA | profil `cpu` (llama.cpp, GGUF 4 bits) | `profile = "cpu"` |
+
+## Poste de dev sous WSL2 (overlay `gpu-local`)
+
+Sous WSL2, le driver est celui de Windows : le GPU apparaît comme `/dev/dxg`, les bibliothèques
+CUDA dans `/usr/lib/wsl/lib`, et il n'y a ni `/dev/nvidia*` ni bus PCI visible. Conséquences :
+
+| Couche | Sous WSL2 |
+|---|---|
+| 1. Driver | Driver Windows, rien à installer dans WSL (surtout pas de driver Linux) |
+| 2. Container toolkit | Identique : `sudo infra/local/gpu-host.sh` (version figée, redémarre k3s si besoin) |
+| 3. Device plugin | GPU Operator inutilisable (validator et DCGM cherchent `/dev/nvidia*`) : device plugin seul, qui gère WSL2, `infra/local/gpu.sh` |
+| 3bis. Métriques GPU | Pas de DCGM sous WSL2 : seules les métriques vLLM remontent |
+| 4. Pod | `deploy/overlays/gpu-local` |
+
+NFD ne voyant pas le GPU, `gpu.sh` pose lui-même le label `nvidia.com/gpu.present=true`
+(attendu par le device plugin et par vLLM).
+
+```bash
+sudo infra/local/gpu-host.sh
+infra/local/gpu.sh                                   # affiche nvidia.com/gpu: 1
+kubectl -n llm delete sts llm --ignore-not-found     # depuis cpu-local : sélecteur immuable
+kubectl apply -k deploy/overlays/gpu-local --server-side
+```
+
+Avec 8 Go de VRAM, dont ~1,5 Go pris par l'affichage Windows, l'overlay sert Qwen3 4B AWQ
+(composant `model-qwen3-4b-awq`) avec `GPU_MEMORY_UTILIZATION=0.75` : si vLLM refuse de
+démarrer faute de VRAM libre, fermer les applications Windows qui utilisent le GPU.
 
 ## Partager un GPU entre plusieurs pods (time-slicing)
 

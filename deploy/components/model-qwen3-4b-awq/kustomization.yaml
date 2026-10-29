@@ -1,0 +1,46 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# GPU de 8 Go : Qwen3 4B quantisé AWQ 4 bits (~2,7 Go de poids, Apache 2.0) sur vLLM.
+# À ajouter après serving-gpu. Le seul candidat qui laisse assez de VRAM au KV cache pour le
+# contexte de 16k des agents kagent : Qwen2.5 7B AWQ (~5,6 Go) n'en laisse que ~5k.
+patches:
+  - target:
+      kind: ConfigMap
+      name: llm-model
+    patch: |-
+      - op: replace
+        path: /data/MODEL_REPO
+        value: Qwen/Qwen3-4B-AWQ
+      - op: replace
+        path: /data/MODEL_REVISION
+        value: 74d4bd2bd4bff9cafc9345221320bffb08b406a3
+      - op: replace
+        path: /data/ALLOW_PATTERNS
+        value: "*.json,*.safetensors,merges.txt"
+      # Format Hugging Face ; vLLM détecte la quantization dans config.json.
+      - op: replace
+        path: /data/TOKENIZER_MODE
+        value: auto
+      - op: replace
+        path: /data/CONFIG_FORMAT
+        value: auto
+      - op: replace
+        path: /data/LOAD_FORMAT
+        value: auto
+      - op: replace
+        path: /data/TOOL_CALL_PARSER
+        value: hermes # appels d'outils <tool_call> de la famille Qwen
+      # Cache KV ~144 Ko par token (36 couches, 8 têtes KV) : 16k tokens ~2,3 Go.
+      - op: replace
+        path: /data/MAX_MODEL_LEN
+        value: "16384"
+  # Qwen3 "réfléchit" (<think>...</think>) avant de répondre par défaut : désactivé, sinon le
+  # raisonnement consomme le contexte des agents et casse le JSON contraint du RAG.
+  - target:
+      kind: StatefulSet
+      name: llm
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: '--default-chat-template-kwargs={"enable_thinking": false}'

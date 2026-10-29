@@ -1,0 +1,9 @@
+# Couche 3 (docs/gpu-on-k3s.md) sur le poste local : device plugin NVIDIA seul, sans GPU Operator.
+# L'operator ne gère pas WSL2 (son validator et DCGM exporter cherchent /dev/nvidia*) ; le device
+# plugin, lui, détecte WSL2 (/dev/dxg) et annonce nvidia.com/gpu. Pas de métriques DCGM ici.
+image:
+  # digest figé, comme les autres images tierces (deploy/components/image-pins)
+  tag: v0.20.1@sha256:27c1b2553a690ca3d29889dcd61df97525d46f58272c0be8dc63c2b18f120075
+runtimeClassName: nvidia # NVML (libnvidia-ml de /usr/lib/wsl/lib) n'est monté que par ce runtime
+# L'affinité par défaut du chart exige un label de nœud : NFD ne voit pas le GPU sous WSL2
+# (pas de bus PCI), gpu.sh pose donc nvidia.com/gpu.present=true, attendu aussi par vLLM.

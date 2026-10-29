@@ -1,0 +1,46 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Profil gpu sur un poste de dev (k3s sous WSL2, RTX 3070 8 Go, 15 Go de RAM), sans ArgoCD.
+# Prérequis : sudo infra/local/gpu-host.sh puis infra/local/gpu.sh (docs/gpu-on-k3s.md, WSL2).
+#   kubectl -n llm delete sts llm --ignore-not-found   # passage depuis cpu-local : sélecteur immuable
+#   kubectl apply -k deploy/overlays/gpu-local --server-side
+# Le volume des poids (models-llm-0) est conservé ; fetch-model y remplace le modèle.
+resources:
+  - ../../base
+  - ../../agents
+  - ../../secrets
+
+components:
+  - ../../components/serving-gpu
+  - ../../components/model-source-hf
+  - ../../components/model-qwen3-4b-awq # tient dans 8 Go avec un contexte de 16k
+  - ../../components/ingress-traefik
+  - ../../components/local-single-node
+  - ../../components/image-pins
+  - ../../components/image-local # après image-pins : remplace les images publiées par la CI
+
+patches:
+  - target: { kind: ConfigMap, name: llm-model }
+    patch: |-
+      # vLLM refuse de démarrer si la VRAM libre est inférieure à cette part des 8 Go :
+      # Windows en garde ~1,5 Go pour l'affichage.
+      - op: replace
+        path: /data/GPU_MEMORY_UTILIZATION
+        value: "0.75"
+  - target: { kind: StatefulSet, name: llm }
+    patch: |-
+      # Moins de séquences simultanées : moins de CUDA graphs capturés, donc moins de VRAM.
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --max-num-seqs=8
+      # Dimensionné pour 24 Go de VRAM et un modèle BF16 : le 4B AWQ charge ~3 Go en RAM.
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: "1", memory: 4Gi }
+          limits: { memory: 8Gi, nvidia.com/gpu: 1 }
+      # Taille du volume déjà créé par cpu-local (la valeur de base, 40 Gi, vise Mistral BF16).
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 10Gi

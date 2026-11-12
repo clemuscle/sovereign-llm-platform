@@ -1,11 +1,11 @@
 # Build multi-étapes : les dépendances sont installées dans un venv, l'image finale
 # ne contient ni compilateur ni cache pip, et tourne en utilisateur non root.
-FROM python:3.12-slim AS build
+FROM python:3.15-slim AS build
 WORKDIR /build
 COPY requirements.lock .
 RUN python -m venv /venv && /venv/bin/pip install --no-cache-dir -r requirements.lock
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 ENV PATH="/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1

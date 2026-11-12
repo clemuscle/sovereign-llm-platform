@@ -11,11 +11,11 @@ RUN go mod init build && go get oras.land/oras/cmd/oras@v${ORAS_VERSION} \
     && CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH \
        go build -trimpath -ldflags="-s -w" -o /out/oras oras.land/oras/cmd/oras
 
-FROM python:3.12-slim AS build
+FROM python:3.15-slim AS build
 COPY requirements.lock .
 RUN python -m venv /venv && /venv/bin/pip install --no-cache-dir -r requirements.lock
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 # Pas de répertoire personnel (--no-create-home) : caches et journaux de huggingface_hub / xet dans /tmp.
 ENV PATH="/venv/bin:$PATH" PYTHONUNBUFFERED=1 HF_HUB_DISABLE_TELEMETRY=1 \
     HF_HOME=/tmp/huggingface

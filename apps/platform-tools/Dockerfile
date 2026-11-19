@@ -3,7 +3,7 @@
 # oras compilé depuis les sources : le binaire publié (1.3.6) embarque go1.26.9, vulnérable
 # (CVE-2026-111943, MITM par certificats x509 intermédiaires). Sources vérifiées par
 # sum.golang.org ; compilation croisée vers l'architecture cible.
-FROM --platform=$BUILDPLATFORM golang:1.27.3-trixie AS oras
+FROM --platform=$BUILDPLATFORM golang:1.27.4-trixie AS oras
 ARG TARGETARCH=amd64
 ARG ORAS_VERSION=1.3.6
 WORKDIR /src

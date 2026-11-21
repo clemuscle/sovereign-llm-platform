@@ -19,6 +19,9 @@ FROM python:3.12-slim
 # Pas de répertoire personnel (--no-create-home) : caches et journaux de huggingface_hub / xet dans /tmp.
 ENV PATH="/venv/bin:$PATH" PYTHONUNBUFFERED=1 HF_HUB_DISABLE_TELEMETRY=1 \
     HF_HOME=/tmp/huggingface
+# Correctifs de sécurité Debian publiés après la construction de l'image de base.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 RUN useradd --uid 10001 --no-create-home fetcher
 COPY --from=oras /out/oras /usr/local/bin/oras
 COPY --from=build /venv /venv

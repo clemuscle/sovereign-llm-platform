@@ -9,6 +9,9 @@ FROM python:3.12-slim
 ENV PATH="/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
+# Correctifs de sécurité Debian publiés après la construction de l'image de base.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 RUN useradd --uid 10001 --no-create-home app
 COPY --from=build /venv /venv
 WORKDIR /srv

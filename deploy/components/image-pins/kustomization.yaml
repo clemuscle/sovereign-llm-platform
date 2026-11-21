@@ -8,11 +8,11 @@ images:
 - name: rag-app
   newName: ghcr.io/clemuscle/sovereign-llm-platform/rag-app
   newTag: 0.2.0
-  digest: sha256:a4b4a40ce2af2c695aaa053f48548ecd3e214e1d34ddf46d01e740c2ef7949e6
+  digest: sha256:35d040c3c03510618b088ecc89b49ec2df5cd591bc051af6e40139287988b4d9
 - name: platform-tools
   newName: ghcr.io/clemuscle/sovereign-llm-platform/platform-tools
   newTag: 0.2.0
-  digest: sha256:71fa52e4e65b0afe9b787e599f76e51da3def612a11981ea51065f145d94b943
+  digest: sha256:51e5bad80ba90bec8c54b162cac82da7670435a9fd472815be4e991bcb8b5898
 - name: vllm/vllm-openai
   newTag: v0.32.0
   digest: sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34
